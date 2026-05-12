@@ -96,5 +96,14 @@ describe("Withdraw Collateral", function () {
         await expect(lending.connect(borrower).withdrawCollateral(withdrawAmount)).to.be.revertedWith("Insufficient collateral")
 
     })
+
+    it("Should successfully let user withdraw collateral if all conditions pass", async function () {
+        const withdrawAmount = ethers.parseEther("800");
+        const collateral = ethers.parseEther("1000")
+
+        await lending.connect(borrower).addCollateral(collateral, { value: collateral });
+
+        await expect(lending.connect(borrower).withdrawCollateral(withdrawAmount)).to.emit(lending, "CollateralWithdrawn").withArgs(borrower.address, withdrawAmount);
+    })
 })
 

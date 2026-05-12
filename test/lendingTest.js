@@ -107,3 +107,45 @@ describe("Withdraw Collateral", function () {
     })
 })
 
+describe("Borrow APS", function () {
+    it("Should revert if a user tries to borrow APS without collateral", async function () {
+        const borrowAPSAmount = 2400;
+
+        await expect(lending.connect(borrower).borrowAPS(borrowAPSAmount)).to.be.revertedWith("No liquidity");
+    })
+
+    it("Should revert if user tries to borrow 0 APS", async function () {
+        const borrowAPSAmount = 0;
+        const collateral = ethers.parseEther("1000")
+
+        await lending.connect(borrower).addCollateral(collateral, { value: collateral });
+
+        await expect(lending.connect(borrower).borrowAPS(borrowAPSAmount)).to.be.revertedWith("Invalid amount");
+    })
+
+    it("Should allow user to borrow APS tokes against their collateral", async function () {
+        const borrowAPSAmount = 400;
+        const collateral = ethers.parseEther("1000")
+        const initialLiquidity = ethers.parseEther("30000");
+        const lendingLiquidity = ethers.parseEther("5000");
+        const ethForPool = ethers.parseEther("1000");
+
+        await lending.connect(borrower).addCollateral(collateral, { value: collateral });
+
+        // Transfer APS tokens to Lending contract for lending liquidity
+        await aps.connect(owner).transfer(lending.target, lendingLiquidity);
+
+        // Approve APSDEX to spend APS tokens
+        await aps.connect(owner).approve(apsDex.target, initialLiquidity);
+        await apsDex.connect(owner).initializePool(initialLiquidity);
+
+        // Send ETH to APSDEX to establish price
+        await owner.sendTransaction({
+            to: apsDex.target,
+            value: ethForPool
+        });
+
+        await expect(lending.connect(borrower).borrowAPS(borrowAPSAmount)).to.emit(lending, "Borrowed").withArgs(borrower.address, borrowAPSAmount);
+    })
+})
+

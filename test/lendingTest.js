@@ -7,6 +7,7 @@ let aps;
 let apsDex;
 let owner;
 let borrower;
+let movePrice;
 
 beforeEach(async function () {
     [owner, borrower] = await ethers.getSigners();
@@ -40,6 +41,14 @@ beforeEach(async function () {
     const lendingContract = await lending.waitForDeployment();
 
     // console.log("APSDEX Contract Address: ", lending.target);
+
+    //deploy the move price contract
+    const MovePrice = await ethers.getContractFactory("MovePrice");
+    movePrice = await MovePrice.deploy(apsAddress, apsAddress);
+
+    await movePrice.waitForDeployment();
+
+    // console.log("MovePrice Contract deployed at: ", movePrice.getAddress());
 });
 
 describe("Deployment", function () {
@@ -309,6 +318,44 @@ describe("Repay Loan", function () {
         // ensure borrower's debt was cleared
         const position = await lending.positions(borrower.address);
         expect(position.borrowedAPS).to.equal(0);
+    })
+})
+
+describe("Liquidate", function () {
+    it("Should liquidate successfully if all the liquidtion conditions are met", async function () {
+        const collateral = ethers.parseEther("100");
+        const initalLiquidity = ethers.parseEther("30000");
+        const ethForPool = ethers.parseEther("1000");
+        const lendingLiquidity = ethers.parseEther("5000");
+        const borrowAPSAmount = ethers.parseEther("500");
+        const borrowerAPSBalance = ethers.parseEther("900");
+        const movePriceEthAmount = ethers.parseEther("2000");
+
+        //add collateral
+        await lending.connect(borrower).addCollateral(collateral, { value: collateral }(""));
+
+        //let owner add liquidity
+        await apsDex.connect(owner).initializePool(initalLiquidity);
+
+        //add eth to the ETH/APS pool or the DEX
+        await apsDex.connect(owner).transfer(ethForPool, { value: ethForPool }(""));
+
+        //add some aps tokens to the lending contract to facilitate borrowing
+        await aps.connect(owner).transfer(lending.target, lendingLiquidity);
+
+        //approve the lending contract to use aps tokens
+        await aps.approve(lending.target, lendingLiquidity);
+
+        //let the borrower take some aps loan
+        await lending.connect(borrower).borrowAPS(borrowAPSAmount);
+
+        //try to move the price by swapping in more ETH to the ETH/APS pool
+        await movePrice.connect(owner).movePrice(movePriceEthAmount, { value: movePriceEthAmount }(""));
+
+        //simulate move the time 24hrs after
+        await ethers.provider.send("evm_increaseTime", [25 * 60 * 60]);
+        await ethers.provider.send("evm_mine", []);
+
     })
 })
 

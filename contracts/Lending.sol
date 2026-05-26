@@ -104,7 +104,7 @@ contract Lending is Ownable {
 
         emit CollateralDeposited(msg.sender, msg.value);
 
-        stake(msg.sender);
+        _stake(msg.sender);
     }
 
     function withdrawCollateral(
@@ -134,6 +134,8 @@ contract Lending is Ownable {
         require(success, "ETH transfer failed");
 
         emit CollateralWithdrawn(msg.sender, amount);
+
+        updateRiskStatus(msg.sender);
     }
 
     // =============================================================
@@ -181,6 +183,8 @@ contract Lending is Ownable {
         emit Borrowed(msg.sender, amount);
 
         harvestCollateralYield(msg.sender);
+
+        updateRiskStatus(msg.sender);
     }
 
     // =============================================================
@@ -195,6 +199,8 @@ contract Lending is Ownable {
             user.borrowedAPS > 0,
             "No active loan"
         );
+
+        harvestCollateralYield(msg.sender);
 
         uint256 repayAmount =
             getRepayAmount(msg.sender);
@@ -223,8 +229,6 @@ contract Lending is Ownable {
         user.riskTimestamp = 0;
 
         emit Repaid(msg.sender, repayAmount);
-
-        harvestCollateralYield(msg.sender);
     }
 
     // =============================================================
@@ -242,6 +246,9 @@ contract Lending is Ownable {
 
         Position storage user =
             positions[borrower];
+
+        
+        harvestCollateralYield(borrower);
 
         uint256 debt =
             getRepayAmount(borrower);
@@ -301,8 +308,6 @@ contract Lending is Ownable {
             debt,
             collateralReward
         );
-
-        harvestCollateralYield(borrower);
     }
 
     // =============================================================
@@ -385,7 +390,7 @@ contract Lending is Ownable {
     //                     SIMULATE STAKING YIELD
     // =============================================================
 
-    function stake(address _user) public returns (bool) {
+    function _stake(address _user) internal returns (bool) {
         require(positions[_user].collateralETH != 0, "No collateral to stake!");
 
         if (positions[_user].stakeTimestamp == 0) {
@@ -408,10 +413,11 @@ contract Lending is Ownable {
         return yield;
     }
 
-    function reduceDebt(address user, uint256 amount) public {
+    function reduceDebt(address user, uint256 amount) internal onlyOwner {
         require(positions[user].borrowedAPS >= amount, "Amount exceeds debt");
         positions[user].borrowedAPS -= amount;
         positions[user].stakeTimestamp = block.timestamp; // reset stake timestamp after debt reduction
+        positions[user].borrowTimestamp = block.timestamp; // reset borrow timestamp to recalculate interest from now
         updateRiskStatus(user);
     }
 
@@ -428,7 +434,7 @@ contract Lending is Ownable {
         // user debt in APS
         uint256 debt = getRepayAmount(_user);
 
-        if(yieldInAPS >= ((10 * debt) / 100)) {
+        if(yieldInAPS >= 0) {
             require(yieldInAPS <= debt, "Yield exceeds debt");
             reduceDebt(_user, yieldInAPS);
         }

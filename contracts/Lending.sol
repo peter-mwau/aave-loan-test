@@ -377,7 +377,9 @@ contract Lending is Ownable {
     function stake(address _user) public returns (bool) {
         require(positions[_user].collateralETH != 0, "No collateral to stake!");
 
-        positions[_user].stakeTimestamp = block.timestamp;
+        if (positions[_user].stakeTimestamp == 0) {
+            positions[_user].stakeTimestamp = block.timestamp;
+        }
 
         uint256 _amount = positions[_user].collateralETH;
 
@@ -386,13 +388,20 @@ contract Lending is Ownable {
         return true;
     }
 
-    function calculateStakingYield(uint256 _amount, address _user) public view returns (uint256) {
-        Position memory position = positions[user];
+    function calculateStakingYield(address _user) public view returns (uint256) {
+        Position memory position = positions[_user];
         uint256 elapsedTime = block.timestamp - position.stakeTimestamp;
-        _amount = position.collateralETH;
+        uint256 _amount = position.collateralETH;
         uint256 yield = (_amount * STAKING_APR * elapsedTime) / (100 * YEAR);
 
         return yield;
+    }
+
+    function reduceDebt(address user, uint256 amount) external {
+        require(positions[user].borrowedAPS >= amount, "Amount exceeds debt");
+        positions[user].borrowedAPS -= amount;
+        positions[user].stakeTimestamp = block.timestamp; // reset stake timestamp after debt reduction
+        updateRiskStatus(user);
     }
 
     // =============================================================
@@ -432,6 +441,11 @@ contract Lending is Ownable {
         return
             user.borrowedAPS +
             calculateInterest(userAddress);
+    }
+
+    function getPosition(address user) external view returns (Position memory)
+    {
+        return positions[user];
     }
 
     // =============================================================

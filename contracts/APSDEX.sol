@@ -3,17 +3,14 @@
 pragma solidity ^0.8.24;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-// import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-// import { APS } from "./APS.sol"; // unused
+import { LibDiamond } from "./DiamondLibrary/LibDiamond.sol";
+import { EcosystemLib } from "./DiamondLibrary/EcosystemLib.sol";
 
 contract APSDEX {
-    IERC20 token;
+    using EcosystemLib for EcosystemLib.Data;
+    EcosystemLib.Data private data;
+    LibDiamond.DiamondStorage private diamondStorage;
 
-    uint256 public ethReserve;
-    uint256 public apsReserve;
-    uint256 public totalLiquidity;
-
-    mapping(address => uint256) public liquidity;
 
     event LiquidityInitialized(address indexed provider, uint256 ETH_amount, uint256 APS_amount);
     event LiquidityProvided(address indexed provider, uint256 liquidityMinted, uint256 ethAmount, uint256 tokenAmount);
@@ -23,24 +20,31 @@ contract APSDEX {
         token = _tokenAddress;
     }
 
+    //Ecosystem1Facet Storage Pointer
+    function ecosystemStorage() internal pure returns (LibDiamond.EcosystemStorage storage es) {
+        return LibDiamond.ecosystemStorage();
+    }
+
     //function to initialize the liquidity pool
     function initializePool(uint256 apsAmount) external payable returns (bool) {
-    require(ethReserve == 0 && apsReserve == 0, "Already initialized");
-    require(msg.value > 0 && apsAmount > 0, "Invalid amounts");
+        LibDiamond.EcosystemStorage storage es = LibDiamond.ecosystemStorage();
 
-    require(token.transferFrom(msg.sender, address(this), apsAmount), "Transfer failed");
+        require(ethReserve == 0 && apsReserve == 0, "Already initialized");
+        require(msg.value > 0 && apsAmount > 0, "Invalid amounts");
 
-    ethReserve = msg.value;
-    apsReserve = apsAmount;
+        require(token.transferFrom(msg.sender, address(this), apsAmount), "Transfer failed");
 
-    totalLiquidity = msg.value; // simple LP init
+        ethReserve = msg.value;
+        apsReserve = apsAmount;
 
-    liquidity[msg.sender] = msg.value;
+        totalLiquidity = msg.value; // simple LP init
 
-    emit LiquidityInitialized(msg.sender, msg.value, apsAmount);
+        liquidity[msg.sender] = msg.value;
 
-    return true;
-}
+        emit LiquidityInitialized(msg.sender, msg.value, apsAmount);
+
+        return true;
+    }
 
     //function to get the amount you should receive (xOutput) given the reserves of both tokens in the pool
     function price(uint256 _xInput, uint256 _xReserves, uint256 _yReserves) public pure returns (uint256 yOutput) {

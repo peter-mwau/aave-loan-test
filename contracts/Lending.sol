@@ -8,37 +8,6 @@ import { APSDEX } from "./APSDEX.sol";
 
 contract Lending is Ownable {
 
-    // =============================================================
-    //                           STATE
-    // =============================================================
-
-    APS public immutable aps;
-    APSDEX public immutable apsDex;
-
-    uint256 public constant COLLATERAL_RATIO = 120; // 120%
-    uint256 public constant LIQUIDATION_BONUS = 10; // 10%
-    uint256 public constant PRECISION = 1e18;
-
-    uint256 public constant INTEREST_RATE = 10; // 10% APR
-    uint256 public constant YEAR = 365 days;
-
-    uint256 public constant STAKING_APR = 15;
-
-    uint256 public constant LIQUIDATION_GRACE_PERIOD = 24 hours;
-
-    // =============================================================
-    //                          STRUCTS
-    // =============================================================
-
-    struct Position {
-        uint256 collateralETH;
-        uint256 borrowedAPS;
-        uint256 borrowTimestamp;
-        uint256 riskTimestamp;
-        uint256 stakeTimestamp;
-    }
-
-    mapping(address => Position) public positions;
 
     // =============================================================
     //                           EVENTS

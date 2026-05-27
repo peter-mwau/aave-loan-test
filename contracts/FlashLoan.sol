@@ -9,9 +9,7 @@ import { IPoolAddressesProvider } from "@aave/core-v3/contracts/interfaces/IPool
 contract FlashLoan is FlashLoanSimpleReceiverBase {
     // ILendingPoolAddressesProvider public immutable override ADDRESSES_PROVIDER;
 
-    address payable public owner;
-
-    mapping(address => uint256) public userOwnedFunds;
+    
 
     event FundsWithdrawn(address indexed owner, uint256 amount);
 

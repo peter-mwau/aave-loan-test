@@ -1,10 +1,10 @@
-//SPDX-LIcense-Identifier: MIT
+// SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.24;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { APS } from "./APS.sol";
+// import { APS } from "./APS.sol"; // unused
 
 contract APSDEX {
     IERC20 token;
@@ -50,19 +50,20 @@ contract APSDEX {
         return numerator / denominator;
      }
 
-     //function to get the current price of the shares in the pool
+    //function to get the current price of the shares in the pool
     function currentPrice() public view returns (uint256) {
-
+        require(apsReserve > 0, "APS reserve is zero");
         return (ethReserve * 1e18) / apsReserve;
     }
 
      //function to calculate the amount of xInput required to get a certain amount of yOutput given the reserves of both tokens in the pool
-     function calculateXInput(uint256 _yOutput, uint256 _xReserves, uint256 _yReserves) public pure returns (uint256 xInput) {
-        require(_xReserves > 0 && _yReserves > 0, "Reserves must be greater than zero");
-        uint256 numerator = _yOutput * _xReserves;
-        uint256 denominator = _yReserves - _yOutput;
-        return (numerator / denominator) + 1; // Adding 1 to account for rounding errors
-     }
+      function calculateXInput(uint256 _yOutput, uint256 _xReserves, uint256 _yReserves) public pure returns (uint256 xInput) {
+          require(_xReserves > 0 && _yReserves > 0, "Reserves must be greater than zero");
+          require(_yOutput < _yReserves, "yOutput must be less than yReserves");
+          uint256 numerator = _yOutput * _xReserves;
+          uint256 denominator = _yReserves - _yOutput;
+          return (numerator / denominator) + 1; // Adding 1 to account for rounding errors
+      }
 
      //function to send eth to DEX in exchange for APS tokens
      function ethToToken() internal returns (uint256 tokenOutput) {
@@ -71,10 +72,11 @@ contract APSDEX {
 
         tokenOutput = (ethInput * apsReserve) / ethReserve;
 
-        require(token.transfer(msg.sender, tokenOutput), "Token transfer failed");
-
+        // update reserves first to follow checks-effects-interactions pattern
         ethReserve += ethInput;
         apsReserve -= tokenOutput;
+
+        require(token.transfer(msg.sender, tokenOutput), "Token transfer failed");
 
         return tokenOutput;
     }
@@ -87,10 +89,12 @@ contract APSDEX {
 
         ethOutput = (tokenInput * ethReserve) / apsReserve;
 
-        payable(msg.sender).transfer(ethOutput);
-
+        // update reserves before external ETH transfer to prevent reentrancy
         apsReserve += tokenInput;
         ethReserve -= ethOutput;
+
+        (bool sent, ) = payable(msg.sender).call{ value: ethOutput }("");
+        require(sent, "ETH transfer failed");
 
         return ethOutput;
     }
@@ -107,16 +111,18 @@ contract APSDEX {
     // allows deposits of $APS and $ETH to liquidity pool
     function deposit() public payable returns (uint256 tokensDeposited) {
         require(msg.value > 0, "Must send value when depositing");
-        uint256 ethReserve = address(this).balance - msg.value;
-        uint256 tokenReserve = token.balanceOf(address(this));
+        require(totalLiquidity > 0, "Pool not initialized");
+
+        uint256 ethReserveLocal = address(this).balance - msg.value;
+        uint256 tokenReserveLocal = token.balanceOf(address(this));
         uint256 tokenDeposit;
 
-        tokenDeposit = ((msg.value * tokenReserve) / ethReserve) + 1;
+        tokenDeposit = ((msg.value * tokenReserveLocal) / ethReserveLocal) + 1;
 
         require(token.balanceOf(msg.sender) >= tokenDeposit, "insufficient token balance");
         require(token.allowance(msg.sender, address(this)) >= tokenDeposit, "insufficient allowance");
 
-        uint256 liquidityMinted = (msg.value * totalLiquidity) / ethReserve;
+        uint256 liquidityMinted = (msg.value * totalLiquidity) / ethReserveLocal;
         liquidity[msg.sender] += liquidityMinted;
         totalLiquidity += liquidityMinted;
 
@@ -128,19 +134,19 @@ contract APSDEX {
     // allows withdrawal of $APS and $ETH from liquidity pool
     function withdraw(uint256 amount) public returns (uint256 ethAmount, uint256 tokenAmount) {
         require(liquidity[msg.sender] >= amount, "withdraw: sender does not have enough liquidity to withdraw.");
-        uint256 ethReserve = address(this).balance;
-        uint256 tokenReserve = token.balanceOf(address(this));
+        uint256 ethReserveLocal = address(this).balance;
+        uint256 tokenReserveLocal = token.balanceOf(address(this));
         uint256 ethWithdrawn;
 
-        ethWithdrawn = (amount * ethReserve) / totalLiquidity;
+        ethWithdrawn = (amount * ethReserveLocal) / totalLiquidity;
 
-        tokenAmount = (amount * tokenReserve) / totalLiquidity;
+        tokenAmount = (amount * tokenReserveLocal) / totalLiquidity;
         liquidity[msg.sender] -= amount;
         totalLiquidity -= amount;
         (bool sent, ) = payable(msg.sender).call{ value: ethWithdrawn }("");
         require(sent, "withdraw(): revert in transferring eth to you!");
         require(token.transfer(msg.sender, tokenAmount));
-        emit LiquidityRemoved(msg.sender, amount, tokenAmount, ethWithdrawn);
+        emit LiquidityRemoved(msg.sender, amount, ethWithdrawn, tokenAmount);
         return (ethWithdrawn, tokenAmount);
     }
 

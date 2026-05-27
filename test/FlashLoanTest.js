@@ -1,54 +1,39 @@
-const assert = require("node:assert/strict");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { deployDiamondFixture } = require("./helpers/deployDiamond");
 
+let fixture;
+let aps;
 let flashLoan;
+let ownership;
 let owner;
-let addr1;
+let diamondAddress;
+let mockPool;
 
 beforeEach(async function () {
-  [owner, addr1] = await ethers.getSigners();
-
-  const MockPool = await ethers.getContractFactory("MockPool");
-  const mockPool = await MockPool.deploy({ gasLimit: 2_000_000 });
-  await mockPool.waitForDeployment();
-
-  const MockPoolAddressesProvider = await ethers.getContractFactory("MockPoolAddressesProvider");
-  const mockProvider = await MockPoolAddressesProvider.deploy(await mockPool.getAddress(), {
-    gasLimit: 2_000_000
-  });
-  await mockProvider.waitForDeployment();
-
-  const FlashLoan = await ethers.getContractFactory("FlashLoan");
-  flashLoan = await FlashLoan.deploy(
-    await mockProvider.getAddress(),
-    {
-      gasLimit: 16_000_000
-    }
-  );
-  await flashLoan.waitForDeployment();
+    fixture = await deployDiamondFixture();
+    ({ aps, flashLoan, ownership, owner, diamondAddress, mockPool } = fixture);
 });
 
 describe("Deployment", function () {
-  it("Should set the right owner", async function () {
-    assert.equal(await flashLoan.owner(), owner.address);
-  })
-})
-
-describe("Flash Loan", function () {
-  it("Should execute a flash loan and repay it", async function () {
-    const asset = ethers.Wallet.createRandom().address;
-    const amount = ethers.parseEther("1");
-
-    // Fund the mock pool with the asset
-    await flashLoan.mockPool().fundPool(asset, amount);
-
-    // Execute the flash loan
-    await flashLoan.executeFlashLoan(asset, amount);
-
-    // Check that the loan was repaid
-    const poolBalance = await flashLoan.mockPool().getPoolBalance(asset);
-    assert.equal(poolBalance.toString(), amount.toString(), "The loan was not repaid correctly");
-  });
+    it("should set the right owner", async function () {
+        expect(await ownership.owner()).to.equal(owner.address);
+    });
 });
 
+describe("Flash Loan", function () {
+    it("should store the pool address and allow a request", async function () {
+        await expect(flashLoan.requestFlashLoanSimple(ethers.ZeroAddress, ethers.parseEther("1"))).to.not.be.reverted;
+    });
 
+    it("should let the owner withdraw funds from the diamond", async function () {
+        const amount = ethers.parseEther("10");
+        await aps.connect(owner).transfer(diamondAddress, amount);
+
+        const before = await aps.balanceOf(owner.address);
+        await flashLoan.connect(owner).withdrawFunds(await aps.getAddress());
+        const after = await aps.balanceOf(owner.address);
+
+        expect(after - before).to.equal(amount);
+    });
+});

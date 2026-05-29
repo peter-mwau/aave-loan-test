@@ -22,14 +22,22 @@ All protocol actions in tests and scripts interact through the Diamond address u
 Current full deployment command:
 
 ```bash
-npm run deploy:all -- --network hardhat
+npm run deploy:all:hardhat
 ```
 
-You can also pass the network directly with npm, for example:
+For a live network, use the network-specific script:
 
 ```bash
-npm run deploy:all --network sepolia
+npm run deploy:all:sepolia
 ```
+
+If you prefer the generic script, pass the network through `DEPLOY_NETWORK`:
+
+```bash
+DEPLOY_NETWORK=sepolia npm run deploy:all
+```
+
+Avoid `npm run deploy:all --network sepolia`; npm treats `--network` as its own config flag and prints warnings.
 
 The sequence is:
 
@@ -42,7 +50,7 @@ The sequence is:
 7. Call FlashLoanFacet.initializeFlashLoan(pool).
 8. Write all addresses to deployments/contract-addresses.json.
 
-For local networks, a mock pool and mock provider are deployed automatically when FLASH_LOAN_POOL_ADDRESS is not set.
+For local networks, a mock pool and mock provider are deployed automatically when no pool address env var is set. For sepolia, set FLASH_LOAN_POOL_ADDRESS or AAVE_POOLSEPOLIA_ADDRESS to your deployed Aave pool address.
 
 ## Main Components
 
@@ -158,4 +166,4 @@ deployments/
 ## Notes
 
 - Standalone legacy contracts/scripts were removed in favor of a single Diamond-based path.
-- If running on non-local networks, set required environment variables in .env (for example FLASH_LOAN_POOL_ADDRESS when needed).
+- If running on non-local networks, set the pool address in .env (FLASH_LOAN_POOL_ADDRESS or AAVE_POOLSEPOLIA_ADDRESS).

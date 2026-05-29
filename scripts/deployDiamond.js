@@ -33,11 +33,23 @@ async function resolveFlashLoanPoolAddress() {
         return deployMockPool();
     }
 
-    throw new Error("Missing FLASH_LOAN_POOL_ADDRESS for this network");
+    throw new Error(
+        `Missing FLASH_LOAN_POOL_ADDRESS for network ${network.name}. Set FLASH_LOAN_POOL_ADDRESS to the Aave pool address before running this deployment.`
+    );
 }
 
 async function main() {
     const [deployer] = await ethers.getSigners();
+
+    const deploymentRecord = {
+        deployer: deployer.address,
+        status: "starting",
+    };
+
+    const startRegistryPath = await writeRegistry(network.name, deploymentRecord);
+
+    console.log(`Starting deployment on ${network.name} with deployer:`, deployer.address);
+    console.log("Preflight address registry written to:", startRegistryPath);
 
     const APS = await ethers.getContractFactory("APS");
     const aps = await APS.deploy();
@@ -50,6 +62,47 @@ async function main() {
     await apsDex.waitForDeployment();
 
     const apsDexAddress = await apsDex.getAddress();
+    deploymentRecord.APS = apsAddress;
+    deploymentRecord.APSDEX = apsDexAddress;
+    deploymentRecord.status = "aps-and-apsdex-deployed";
+
+    const constructorAddresses = {
+        DiamondCutFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 1 }),
+        DiamondLoupeFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 2 }),
+        OwnershipFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 3 }),
+        ApsdexFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 4 }),
+        DiamondInit: ethers.getCreateAddress({ from: apsDexAddress, nonce: 5 }),
+        FlashLoanFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 6 }),
+        MovePriceFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 7 }),
+        LendingFacet: ethers.getCreateAddress({ from: apsDexAddress, nonce: 8 }),
+    };
+
+    deploymentRecord.DiamondInit = constructorAddresses.DiamondInit;
+    deploymentRecord.DiamondCutFacet = constructorAddresses.DiamondCutFacet;
+    deploymentRecord.DiamondLoupeFacet = constructorAddresses.DiamondLoupeFacet;
+    deploymentRecord.OwnershipFacet = constructorAddresses.OwnershipFacet;
+    deploymentRecord.ApsdexFacet = constructorAddresses.ApsdexFacet;
+    deploymentRecord.FlashLoanFacet = constructorAddresses.FlashLoanFacet;
+    deploymentRecord.MovePriceFacet = constructorAddresses.MovePriceFacet;
+    deploymentRecord.LendingFacet = constructorAddresses.LendingFacet;
+    deploymentRecord.Facets = {
+        DiamondCutFacet: constructorAddresses.DiamondCutFacet,
+        DiamondLoupeFacet: constructorAddresses.DiamondLoupeFacet,
+        OwnershipFacet: constructorAddresses.OwnershipFacet,
+        ApsdexFacet: constructorAddresses.ApsdexFacet,
+        FlashLoanFacet: constructorAddresses.FlashLoanFacet,
+        MovePriceFacet: constructorAddresses.MovePriceFacet,
+        LendingFacet: constructorAddresses.LendingFacet,
+    };
+
+    const registryPath = await writeRegistry(network.name, deploymentRecord);
+
+    console.log("APS deployed to:", apsAddress);
+    console.log("APSDEX diamond deployed to:", apsDexAddress);
+    console.log("Diamond init deployed to:", constructorAddresses.DiamondInit);
+    console.log("Facet addresses:", deploymentRecord.Facets);
+    console.log("Progress written to registry:", registryPath);
+
     const apsDexFacet = await ethers.getContractAt("ApsdexFacet", apsDexAddress);
     const lendingFacet = await ethers.getContractAt("LendingFacet", apsDexAddress);
     const movePriceFacet = await ethers.getContractAt("MovePriceFacet", apsDexAddress);
@@ -61,12 +114,8 @@ async function main() {
     const flashLoanPool = await resolveFlashLoanPoolAddress();
     await flashLoanFacet.initializeFlashLoan(flashLoanPool.poolAddress);
 
-    const deploymentRecord = {
-        deployer: deployer.address,
-        APS: apsAddress,
-        APSDEX: apsDexAddress,
-        FlashLoanPool: flashLoanPool.poolAddress,
-    };
+    deploymentRecord.FlashLoanPool = flashLoanPool.poolAddress;
+    deploymentRecord.status = "complete";
 
     if (flashLoanPool.mockPoolAddress) {
         deploymentRecord.MockPool = flashLoanPool.mockPoolAddress;
@@ -120,11 +169,11 @@ async function main() {
         // non-fatal: if loupe not present or call fails, skip
     }
 
-    const registryPath = await writeRegistry(network.name, deploymentRecord);
+    const finalRegistryPath = await writeRegistry(network.name, deploymentRecord);
 
     console.log("APS deployed to:", apsAddress);
     console.log("APSDEX diamond deployed to:", apsDexAddress);
-    console.log("Address registry written to:", registryPath);
+    console.log("Address registry written to:", finalRegistryPath);
 }
 
 main().catch((error) => {

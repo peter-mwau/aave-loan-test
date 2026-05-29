@@ -9,9 +9,10 @@ if (!scriptPath) {
     process.exit(1);
 }
 
+const explicitNetwork = process.env.DEPLOY_NETWORK;
 const npmNetwork = process.env.npm_config_network;
 const positionalNetwork = extraArgs.find((arg) => !arg.startsWith("-"));
-const network = npmNetwork && npmNetwork !== "true" ? npmNetwork : positionalNetwork || "hardhat";
+const network = explicitNetwork || (npmNetwork && npmNetwork !== "true" ? npmNetwork : positionalNetwork || "hardhat");
 const hardhatArgs = ["hardhat", "run", path.normalize(scriptPath), "--network", network];
 
 const result = spawnSync("npx", hardhatArgs, {

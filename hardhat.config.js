@@ -4,13 +4,7 @@ require("dotenv").config();
 
 const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [];
 
-const infuraValue = process.env.INFURA_RPC_URL;
-
-const sepoliaUrl = infuraValue
-  ? (infuraValue.startsWith("http")
-    ? infuraValue
-    : `https://sepolia.infura.io/v3/${infuraValue}`)
-  : null;
+const sepoliaUrl = process.env.INFURA_RPC_URL;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -34,14 +28,10 @@ module.exports = {
       url: "https://rpc.monad.xyz",
       accounts
     },
-    ...(sepoliaUrl
-      ? {
-        sepolia: {
-          url: sepoliaUrl,
-          accounts
-        }
-      }
-      : {})
+    sepolia: {
+      url: sepoliaUrl,
+      accounts
+    }
   },
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY
